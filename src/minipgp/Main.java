@@ -6,6 +6,8 @@
 
 package minipgp;
 
+import javax.mail.MessagingException;
+
 /**
  *
  * @author leonardo
@@ -14,9 +16,10 @@ public class Main {
 
     /**
      * @param args the command line arguments
+     * @throws javax.mail.MessagingException
      */
-    public static void main(String[] args) {
-        new MailHandler().receiveMail("imaps");
+    public static void main(String[] args) throws MessagingException {
+        //
     }
     
 }
