@@ -9,6 +9,9 @@ import java.io.ByteArrayOutputStream;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
+import java.security.PublicKey;
+import java.security.Signature;
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
@@ -38,7 +41,7 @@ public class Message {
             BadPaddingException, Exception {
         if (message != null) {
             if (!isEncrypted) {
-                Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
+                Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
                 MessageDigest algorithm = MessageDigest.getInstance("SHA-256");
                 byte[] key = algorithm.digest(password);
                 cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(key, "AES"));
@@ -60,7 +63,7 @@ public class Message {
             BadPaddingException, Exception {
         if (message != null) {
             if (isEncrypted) {
-                Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
+                Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
                 MessageDigest algorithm = MessageDigest.getInstance("SHA-256");
                 byte[] key = algorithm.digest(password);
                 cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(key, "AES"));
@@ -96,6 +99,30 @@ public class Message {
             }
         } else {
             throw new Exception("Não há mensagem para comprimir!");
+        }
+    }
+    
+    // Método para assinar a mensagem
+    public void addSignature(PrivateKey privateKey) throws Exception{
+        if (message != null) {
+            Signature sign = Signature.getInstance("SHA256withRSA");
+            sign.initSign(privateKey);
+            sign.update(message);
+            signedHash = sign.sign();
+        } else {
+            throw new Exception("Não há mensagem para assinar!");
+        }
+    }
+    
+    // Método para verificar assinatura de mensagem.
+    public boolean verifySignature(PublicKey publicKey) throws Exception{
+        if (message != null && signedHash != null) {
+            Signature sign = Signature.getInstance("SHA256withRSA");
+            sign.initVerify(publicKey);
+            sign.update(message);
+            return sign.verify(signedHash);
+        } else {
+            throw new Exception("Não há mensagem ou assinatura para verificar!");
         }
     }
     
