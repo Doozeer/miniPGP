@@ -31,6 +31,7 @@ public class Message {
     private boolean isEncrypted = false;
     private boolean isCompressed = false;
 
+    // Método para cifrar a mensagem usando AES.
     public void encryptMessage(byte[] password)
             throws NoSuchAlgorithmException, NoSuchPaddingException,
             InvalidKeyException, IllegalBlockSizeException,
@@ -52,6 +53,7 @@ public class Message {
         }
     }
 
+    // Método de decifrar a mensagem cifrada com AES.
     public void decryptMessage(byte[] password)
             throws NoSuchAlgorithmException, NoSuchPaddingException,
             InvalidKeyException, IllegalBlockSizeException,
@@ -77,6 +79,7 @@ public class Message {
         }
     }
 
+    // Método de compressão ZIP da mensagem.
     public void compressMessage() throws Exception {
         if (message != null) {
             if (!isCompressed) {
@@ -96,6 +99,7 @@ public class Message {
         }
     }
     
+    // Método de descompressão ZIP da mensagem.
     public void decompressMessage() throws Exception {
         if (message != null) {
             if (isCompressed) {
