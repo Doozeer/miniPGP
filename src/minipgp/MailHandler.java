@@ -25,9 +25,13 @@ public class MailHandler {
             Session session = Session.getDefaultInstance(props, null);
             store = session.getStore();
             store.connect(server, username, password);
-            Folder[] folders = store.getUserNamespaces("dozeer");
-            for(Folder f : folders){
-                System.out.println(f);
+            for(Folder f: store.getDefaultFolder().list()){
+                System.out.println(f.getName());
+                if(f.getName().equals("[Gmail]")){
+                    for(Folder gmf: f.list()){
+                        System.out.println("|- " + gmf.getName());
+                    }
+                }
             }
         } catch (NoSuchProviderException e) {
         } catch (MessagingException e) {
