@@ -6,6 +6,7 @@
 package minipgp;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -19,6 +20,8 @@ import javax.crypto.NoSuchPaddingException;
 import javax.crypto.spec.SecretKeySpec;
 import java.util.zip.Deflater;
 import java.util.zip.Inflater;
+import sun.misc.BASE64Decoder;
+import sun.misc.BASE64Encoder;
 
 /**
  *
@@ -147,6 +150,20 @@ public class Message {
         } else {
             throw new Exception("Não há mensagem para descomprimir!");
         }
+    }
+    
+    public String getBASE64Message() throws Exception {
+        if(message != null) {
+            BASE64Encoder encoder = new BASE64Encoder();
+            return encoder.encode(message);
+        } else {
+            throw new Exception("Não há mensagem para codificar!");
+        }
+    }
+    
+    public void setMessageFromBASE64(String BASE64message) throws IOException{
+        BASE64Decoder decoder = new BASE64Decoder();
+        message = decoder.decodeBuffer(BASE64message);
     }
 
     private static boolean matchBytes(byte[] data1, byte[] data2) {
