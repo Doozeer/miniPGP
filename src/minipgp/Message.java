@@ -6,6 +6,7 @@
 package minipgp;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
@@ -20,8 +21,17 @@ import javax.crypto.NoSuchPaddingException;
 import javax.crypto.spec.SecretKeySpec;
 import java.util.zip.Deflater;
 import java.util.zip.Inflater;
-import sun.misc.BASE64Decoder;
-import sun.misc.BASE64Encoder;
+import javax.crypto.spec.IvParameterSpec;
+import javax.xml.parsers.*;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NamedNodeMap;
+import org.w3c.dom.Node;
+import org.xml.sax.SAXException;
 
 /**
  *
@@ -32,24 +42,154 @@ public class Message {
     private String sender;
     private String recipient;
     private byte[] message;
-    private byte[] messageHash;
+    private byte[] iv;
     private byte[] signedHash;
     private boolean isEncrypted = false;
     private boolean isCompressed = false;
 
+    public Message() {
+    }
+
+    public Message(String sender, String recipient, String message) throws NoSuchAlgorithmException {
+        setSender(sender);
+        setRecipient(recipient);
+        setMessage(message);
+    }
+
+    public final void setSender(String sender) {
+        this.sender = sender;
+    }
+
+    public String getSender() {
+        return sender;
+    }
+
+    public final void setRecipient(String recipient) {
+        this.recipient = recipient;
+    }
+
+    public String getRecipient() {
+        return this.recipient;
+    }
+
+    public boolean isSigned() {
+        return signedHash != null && signedHash.length > 0;
+    }
+    
+    public boolean isCompressed(){
+        return isCompressed;
+    }
+    
+    public boolean isEncrypted(){
+        return isEncrypted;
+    }
+
+    public final void setMessage(String message) throws NoSuchAlgorithmException {
+        this.message = message.getBytes();
+        this.isCompressed = false;
+        this.isEncrypted = false;
+        iv = null;
+    }
+
+    public String getMessage() {
+        return new String(this.message);
+    }
+
+    public static Message readMessageFromXML(File messageFile) throws IOException, ParserConfigurationException, SAXException {
+        DocumentBuilder db = DocumentBuilderFactory.newInstance().newDocumentBuilder();
+        Document doc = db.parse(messageFile);
+        Element root = doc.getDocumentElement();
+
+        Message m = new Message();
+        Node senderNode = root.getElementsByTagName("sender").item(0);
+        m.sender = senderNode.getTextContent();
+        Node recNode = root.getElementsByTagName("recipient").item(0);
+        m.recipient = recNode.getTextContent();
+        Node msgNode = root.getElementsByTagName("MessageData").item(0);
+        m.message = PGPMethods.decodeBASE64(msgNode.getTextContent());
+        NamedNodeMap msgAttrb = msgNode.getAttributes();
+        m.isEncrypted = msgAttrb.getNamedItem("encrypted").getNodeValue().equals("true");
+        m.isCompressed = msgAttrb.getNamedItem("compressed").getNodeValue().equals("true");
+        if(m.isEncrypted){
+            m.iv = PGPMethods.decodeBASE64(root.getElementsByTagName("iv").item(0).getTextContent());
+        }
+        String signature = root.getElementsByTagName("signature").item(0).getTextContent();
+        if (signature.length() > 0) {
+            m.signedHash = PGPMethods.decodeBASE64(signature);
+        }
+        return m;
+    }
+
+    public void saveMessageToXML(File messageFile, String encryptionPassword, PrivateKey signature, boolean compress)
+            throws ParserConfigurationException, IOException, Exception {
+        // Aplicando opções de segurança e compressão
+        applyOptions(encryptionPassword, signature, compress);
+
+        // Preparando arquivo XML
+        DocumentBuilder db = DocumentBuilderFactory.newInstance().newDocumentBuilder();
+        Document doc = db.newDocument();
+
+        // Criando elementos XML
+        Element root = doc.createElement("Message");
+        Element senderElm, recElm, msgElm, ivElm, signElm;
+        senderElm = doc.createElement("sender");
+        recElm = doc.createElement("recipient");
+        msgElm = doc.createElement("MessageData");
+        ivElm = doc.createElement("iv");
+        signElm = doc.createElement("signature");
+
+        // Definindo valores dos elementos
+        senderElm.setTextContent(sender);
+        recElm.setTextContent(recipient);
+        msgElm.setTextContent(PGPMethods.encodeBASE64(message));
+        msgElm.setAttribute("encrypted", isEncrypted ? "true" : "false");
+        msgElm.setAttribute("compressed", isCompressed ? "true" : "false");
+        ivElm.setTextContent(PGPMethods.encodeBASE64(iv));
+        signElm.setTextContent(PGPMethods.encodeBASE64(signedHash));
+
+        // Definindo estrutura dos elementos
+        doc.appendChild(root);
+        root.appendChild(senderElm);
+        root.appendChild(recElm);
+        root.appendChild(msgElm);
+        root.appendChild(ivElm);
+        root.appendChild(signElm);
+
+        // Gravando arquivo
+        messageFile.createNewFile();
+        DOMSource source = new DOMSource(doc);
+        StreamResult result = new StreamResult(messageFile);
+        TransformerFactory transFactory = TransformerFactory.newInstance();
+        Transformer transformer = transFactory.newTransformer();
+        transformer.transform(source, result);
+    }
+
+    public void applyOptions(String encryptionPassword, PrivateKey signature, boolean compress)
+            throws Exception {
+        if (signature != null) {
+            addSignature(signature);
+        }
+        if (encryptionPassword != null) {
+            encryptMessage(encryptionPassword);
+        }
+        if (compress) {
+            compressMessage();
+        }
+    }
+
     // Método para cifrar a mensagem usando AES.
-    public void encryptMessage(byte[] password)
+    public void encryptMessage(String password)
             throws NoSuchAlgorithmException, NoSuchPaddingException,
             InvalidKeyException, IllegalBlockSizeException,
             BadPaddingException, Exception {
         if (message != null) {
             if (!isEncrypted) {
                 Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
-                MessageDigest algorithm = MessageDigest.getInstance("SHA-256");
-                byte[] key = algorithm.digest(password);
+                MessageDigest algorithm = MessageDigest.getInstance("MD5");
+                byte[] key = algorithm.digest(password.getBytes());
                 cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(key, "AES"));
-                messageHash = algorithm.digest(message);
                 message = cipher.doFinal(message);
+                iv = cipher.getIV();
                 isEncrypted = true;
             } else {
                 throw new Exception("Mensagem já está cifrada!");
@@ -60,22 +200,20 @@ public class Message {
     }
 
     // Método de decifrar a mensagem cifrada com AES.
-    public void decryptMessage(byte[] password)
+    public void decryptMessage(String password)
             throws NoSuchAlgorithmException, NoSuchPaddingException,
             InvalidKeyException, IllegalBlockSizeException,
             BadPaddingException, Exception {
         if (message != null) {
-            if (isEncrypted) {
-                Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
-                MessageDigest algorithm = MessageDigest.getInstance("SHA-256");
-                byte[] key = algorithm.digest(password);
-                cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(key, "AES"));
-                byte[] temp = cipher.doFinal(message);
-                if (matchBytes(algorithm.digest(temp), messageHash)) {
-                    isEncrypted = false;
-                    message = temp;
+            if (isEncrypted && iv != null) {
+                if (!isCompressed) {
+                    Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+                    MessageDigest algorithm = MessageDigest.getInstance("MD5");
+                    byte[] key = algorithm.digest(password.getBytes());
+                    cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(key, "AES"), new IvParameterSpec(iv));
+                    message = cipher.doFinal(message);
                 } else {
-                    throw new Exception("Senha inválida!");
+                    throw new Exception("A mensagem deve ser descomprimida antes de decifrar!");
                 }
             } else {
                 throw new Exception("Mensagem não está cifrada!");
@@ -93,9 +231,13 @@ public class Message {
                 compressor.setInput(message);
                 compressor.finish();
                 byte[] buffer = new byte[message.length];
-                int compressedLength = compressor.deflate(buffer);
-                message = new byte[compressedLength];
-                System.arraycopy(buffer, 0, message, 0, compressedLength);
+                ByteArrayOutputStream stream = new ByteArrayOutputStream();
+                int n;
+                while (!compressor.finished()) {
+                    n = compressor.deflate(buffer);
+                    stream.write(buffer, 0, n);
+                }
+                message = stream.toByteArray();
                 isCompressed = true;
             } else {
                 throw new Exception("A mensagem já está comprimida!");
@@ -104,9 +246,9 @@ public class Message {
             throw new Exception("Não há mensagem para comprimir!");
         }
     }
-    
+
     // Método para assinar a mensagem
-    public void addSignature(PrivateKey privateKey) throws Exception{
+    public void addSignature(PrivateKey privateKey) throws Exception {
         if (message != null) {
             Signature sign = Signature.getInstance("SHA256withRSA");
             sign.initSign(privateKey);
@@ -116,9 +258,9 @@ public class Message {
             throw new Exception("Não há mensagem para assinar!");
         }
     }
-    
+
     // Método para verificar assinatura de mensagem.
-    public boolean verifySignature(PublicKey publicKey) throws Exception{
+    public boolean verifySignature(PublicKey publicKey) throws Exception {
         if (message != null && signedHash != null) {
             Signature sign = Signature.getInstance("SHA256withRSA");
             sign.initVerify(publicKey);
@@ -128,17 +270,17 @@ public class Message {
             throw new Exception("Não há mensagem ou assinatura para verificar!");
         }
     }
-    
+
     // Método de descompressão ZIP da mensagem.
     public void decompressMessage() throws Exception {
         if (message != null) {
             if (isCompressed) {
                 Inflater decompressor = new Inflater();
                 decompressor.setInput(message);
-                byte[] buffer = new byte[1000];
+                byte[] buffer = new byte[100];
                 ByteArrayOutputStream stream = new ByteArrayOutputStream();
                 int n;
-                while(!decompressor.finished()){
+                while (!decompressor.finished()) {
                     n = decompressor.inflate(buffer);
                     stream.write(buffer, 0, n);
                 }
@@ -151,31 +293,5 @@ public class Message {
             throw new Exception("Não há mensagem para descomprimir!");
         }
     }
-    
-    public String getBASE64Message() throws Exception {
-        if(message != null) {
-            BASE64Encoder encoder = new BASE64Encoder();
-            return encoder.encode(message);
-        } else {
-            throw new Exception("Não há mensagem para codificar!");
-        }
-    }
-    
-    public void setMessageFromBASE64(String BASE64message) throws IOException{
-        BASE64Decoder decoder = new BASE64Decoder();
-        message = decoder.decodeBuffer(BASE64message);
-    }
 
-    private static boolean matchBytes(byte[] data1, byte[] data2) {
-        int len = data1.length;
-        if (len != data2.length) {
-            return false;
-        }
-
-        boolean b = true;
-        for (int i = 0; i < len && b; i++) {
-            b &= data1[i] == data2[i];
-        }
-        return b;
-    }
 }
