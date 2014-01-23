@@ -122,7 +122,7 @@ public class PGPMethods {
                 throw new Exception("Arquivo inválido!");
             }
         } else {
-            throw new Exception("Não há chave privada armazenada para '" + owner + "'.");
+            return null;
         }
     }
     
@@ -146,7 +146,7 @@ public class PGPMethods {
                 throw new Exception("Arquivo inválido!");
             }
         } else {
-            throw new Exception("Não há chave publica armazenada para '" + owner + "'.");
+            return null;
         }
     }
 
