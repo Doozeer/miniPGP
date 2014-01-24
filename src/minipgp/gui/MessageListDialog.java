@@ -7,6 +7,7 @@ package minipgp.gui;
 
 import java.io.File;
 import javax.swing.DefaultListModel;
+import javax.swing.JOptionPane;
 import minipgp.Main;
 
 /**
@@ -196,6 +197,11 @@ public class MessageListDialog extends javax.swing.JDialog {
             int i = messageList.getSelectedIndex();
             if(i >= 0 && i < messages.length){
                 File selectedMessage = messages[i];
+                try{
+                    new ReadMessageDialog(null, selectedMessage);
+                } catch (Exception e) {
+                    JOptionPane.showMessageDialog(this, e.getMessage(), "Erro", JOptionPane.ERROR_MESSAGE);
+                }
             }
         }
     }//GEN-LAST:event_messageListMouseClicked
